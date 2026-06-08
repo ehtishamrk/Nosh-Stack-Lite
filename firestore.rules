@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── HELPERS ──────────────────────────────────────────────────
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // ── SETTINGS ─────────────────────────────────────────────────
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── CATEGORIES ───────────────────────────────────────────────
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── PRODUCTS ─────────────────────────────────────────────────
+    match /products/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── CASHIERS ─────────────────────────────────────────────────
+    // POS reads unauthenticated (PIN login before Firebase Auth)
+    match /cashiers/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── ORDERS ───────────────────────────────────────────────────
+    // POS creates orders unauthenticated
+    match /orders/{id} {
+      allow read: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasAll([
+          'orderNumber', 'items', 'orderType',
+          'status', 'total', 'customerName', 'source'
+        ])
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.total < 1000000
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.orderType in ['dine_in','takeaway','delivery']
+        && request.resource.data.status in ['pending','completed']
+        && request.resource.data.source in ['pos','pos_offline'];
+      allow update, delete: if isAdmin();
+    }
+
+    // ── CUSTOMERS ────────────────────────────────────────────────
+    match /customers/{id} {
+      allow read: if isAdmin();
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // ── RESERVATIONS ─────────────────────────────────────────────
+    match /reservations/{id} {
+      allow read: if isAdmin();
+      allow create: if
+        request.resource.data.customerName is string
+        && request.resource.data.phone is string
+        && request.resource.data.guestCount is int
+        && request.resource.data.guestCount >= 1
+        && request.resource.data.guestCount <= 50;
+      allow update, delete: if isAdmin();
+    }
+
+    // ── POS SESSIONS (single-session enforcement) ─────────────────
+    match /pos_sessions/{pin} {
+      allow read, write: if true;
+    }
+
+    // ── PIN ATTEMPTS (brute force logging) ────────────────────────
+    match /pin_attempts/{id} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+  }
+}

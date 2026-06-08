@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Gristo POS</title>
+<link rel="manifest" href="manifest-pos.json">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap');
+
+  :root {
+    --gold: #D4A843;
+    --gold-dim: #a07830;
+    --gold-glow: rgba(212,168,67,0.15);
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --surface3: #242424;
+    --border: #2a2a2a;
+    --border2: #333;
+    --text: #f0f0f0;
+    --text2: #a0a0a0;
+    --text3: #555;
+    --green: #3ecf8e;
+    --red: #f66;
+    --blue: #5b9cf6;
+    --orange: #f5a623;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font: 'Sora', sans-serif;
+    --font-ur: 'Noto Nastaliq Urdu', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; overflow: hidden; user-select: none; }
+
+  body.urdu { direction: rtl; }
+  body.urdu * { font-family: var(--font-ur); }
+  body.urdu .en-only { display: none; }
+  body:not(.urdu) .ur-only { display: none; }
+
+  /* ── PIN SCREEN ── */
+  .pin-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; flex-direction: column;
+  }
+  .pin-logo { font-size: 32px; font-weight: 700; color: var(--gold); margin-bottom: 6px; }
+  .pin-rest-name { font-size: 14px; color: var(--text2); margin-bottom: 40px; }
+  .pin-title { font-size: 13px; color: var(--text3); margin-bottom: 16px; letter-spacing: 0.5px; }
+  .pin-dots { display: flex; gap: 12px; margin-bottom: 32px; min-height: 20px; align-items: center; }
+  .pin-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border2); transition: all 0.15s; }
+  .pin-dot.filled { background: var(--gold); border-color: var(--gold); transform: scale(1.1); }
+  .pin-keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; }
+  .pin-key {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border2);
+    color: var(--text); font-size: 20px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.1s; font-family: var(--font);
+    -webkit-touch-callout: none;
+  }
+  .pin-key:active, .pin-key.pressed { background: var(--gold); color: #000; transform: scale(0.93); border-color: var(--gold); }
+  .pin-key.del { background: transparent; color: var(--text3); font-size: 16px; }
+  .pin-key.del:active { color: var(--red); }
+  .pin-error { color: var(--red); font-size: 12px; margin-top: 16px; min-height: 18px; }
+  .pin-lockout { color: var(--orange); font-size: 12px; margin-top: 16px; }
+
+  /* ── SETUP SCREEN ── */
+  .setup-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; z-index: 2000;
+  }
+  .setup-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 380px; max-width: 95vw; overflow: hidden; }
+  .setup-header { background: var(--gold); padding: 24px; text-align: center; }
+  .setup-header h2 { font-size: 22px; font-weight: 700; color: #000; }
+  .setup-header p { font-size: 12px; color: rgba(0,0,0,0.6); margin-top: 4px; }
+  .setup-body { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  .setup-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .setup-input { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; width: 100%; font-family: var(--font); }
+  .setup-input:focus { outline: none; border-color: var(--gold); }
+  .setup-btn { background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; font-family: var(--font); margin-top: 4px; }
+  .setup-msg { font-size: 12px; color: var(--red); text-align: center; min-height: 16px; }
+
+  /* ── MAIN POS LAYOUT ── */
+  .pos-root { display: flex; height: 100vh; }
+
+  /* LEFT — MENU */
+  .pos-left { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+
+  /* HEADER */
+  .pos-header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 16px; height: 52px; display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .pos-logo { font-size: 16px; font-weight: 700; color: var(--gold); }
+  .pos-cashier { font-size: 12px; color: var(--text3); }
+  .pos-header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .pos-offline-badge { background: var(--orange); color: #000; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; display: none; }
+  .pos-offline-badge.show { display: inline-flex; }
+  .icon-btn { background: none; border: none; color: var(--text3); cursor: pointer; padding: 6px; font-size: 16px; border-radius: 6px; transition: all 0.15s; }
+  .icon-btn:hover { background: var(--surface2); color: var(--text); }
+
+  /* ORDER TYPE */
+  .order-type-bar {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+  }
+  .ot-btn {
+    flex: 1; padding: 10px 8px; text-align: center; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--text3);
+    border-bottom: 2px solid transparent; transition: all 0.15s;
+  }
+  .ot-btn.active { color: var(--gold); border-bottom-color: var(--gold); background: var(--gold-glow); }
+
+  /* CATEGORIES */
+  .cat-bar {
+    display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .cat-bar::-webkit-scrollbar { display: none; }
+  .cat-chip {
+    flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+    background: var(--surface2); border: 1px solid var(--border);
+    font-size: 12px; color: var(--text2); cursor: pointer; white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .cat-chip.active { background: var(--gold-glow); border-color: var(--gold); color: var(--gold); }
+
+  /* PRODUCT GRID */
+  .product-grid {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px;
+    align-content: start;
+  }
+  .product-tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; cursor: pointer;
+    transition: all 0.15s; position: relative;
+  }
+  .product-tile:active { transform: scale(0.96); }
+  .product-tile.in-cart { border-color: var(--gold); }
+  .product-tile.unavail { opacity: 0.4; pointer-events: none; }
+  .product-tile img { width: 100%; height: 80px; object-fit: cover; display: block; background: var(--surface2); }
+  .product-tile-body { padding: 8px 10px; }
+  .product-tile-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.3; margin-bottom: 4px; }
+  .product-tile-price { font-size: 13px; font-weight: 700; color: var(--gold); }
+  .product-tile-disc { font-size: 10px; color: var(--text3); text-decoration: line-through; }
+  .product-tile-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: var(--gold); color: #000; font-size: 11px; font-weight: 700;
+    width: 22px; height: 22px; border-radius: 50%; display: none;
+    align-items: center; justify-content: center;
+  }
+  .product-tile.in-cart .product-tile-badge { display: flex; }
+  .out-badge { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--red); font-weight: 600; }
+
+  /* RIGHT — CART */
+  .pos-right {
+    width: 340px; display: flex; flex-direction: column; background: var(--surface);
+    flex-shrink: 0;
+  }
+  .cart-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  .cart-title { font-size: 14px; font-weight: 600; }
+  .cart-count { background: var(--gold); color: #000; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+
+  /* Customer info */
+  .customer-info { padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 8px; }
+  .cust-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 12px; font-family: var(--font); }
+  .cust-input:focus { outline: none; border-color: var(--gold); }
+
+  /* Cart items */
+  .cart-items { flex: 1; overflow-y: auto; padding: 8px; }
+  .cart-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface2);
+    margin-bottom: 6px;
+  }
+  .cart-item-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .cart-item-price { font-size: 12px; color: var(--gold); font-weight: 600; white-space: nowrap; }
+  .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+  .qty-btn { width: 24px; height: 24px; border-radius: 6px; background: var(--surface3); border: none; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .qty-btn:active { background: var(--gold); color: #000; }
+  .qty-num { font-size: 13px; font-weight: 600; min-width: 20px; text-align: center; color: var(--text); }
+
+  /* Cart empty */
+  .cart-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text3); gap: 8px; }
+  .cart-empty-icon { font-size: 36px; }
+  .cart-empty-text { font-size: 12px; }
+
+  /* Cart footer */
+  .cart-footer { border-top: 1px solid var(--border); padding: 12px 14px; flex-shrink: 0; }
+  .cart-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .cart-row.total { font-weight: 700; font-size: 16px; color: var(--text); padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .cart-row.discount { color: var(--red); }
+  .payment-row { display: flex; gap: 6px; margin-top: 10px; }
+  .pay-btn {
+    flex: 1; padding: 12px 8px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: all 0.15s; font-family: var(--font);
+  }
+  .pay-btn span { font-size: 10px; font-weight: 400; opacity: 0.7; }
+  .pay-cash { background: var(--green); color: #000; }
+  .pay-cash:hover { background: #4edfa0; }
+  .pay-card { background: var(--blue); color: #000; }
+  .pay-card:hover { background: #70adf7; }
+  .pay-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Discount area */
+  .discount-row { display: flex; gap: 6px; margin-top: 8px; }
+  .disc-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 12px; font-family: var(--font); }
+  .disc-input:focus { outline: none; border-color: var(--gold); }
+  .disc-btn { background: transparent; border: 1px solid var(--border2); color: var(--text2); border-radius: 6px; padding: 7px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .disc-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ── SUCCESS SCREEN ── */
+  .success-screen {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    z-index: 500; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s; backdrop-filter: blur(4px);
+  }
+  .success-screen.show { opacity: 1; pointer-events: all; }
+  .success-box {
+    background: var(--surface); border: 1px solid var(--border2); border-radius: 16px;
+    padding: 32px; text-align: center; max-width: 340px; width: 90%;
+    transform: scale(0.9); transition: transform 0.25s;
+  }
+  .success-screen.show .success-box { transform: scale(1); }
+  .success-icon { font-size: 52px; margin-bottom: 12px; }
+  .success-title { font-size: 20px; font-weight: 700; color: var(--green); margin-bottom: 6px; }
+  .success-meta { font-size: 13px; color: var(--text2); margin-bottom: 24px; line-height: 1.6; }
+  .success-actions { display: flex; gap: 10px; justify-content: center; }
+
+  /* ── DISCOUNT PIN MODAL ── */
+  .disc-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    z-index: 600; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; backdrop-filter: blur(3px);
+  }
+  .disc-modal.open { opacity: 1; pointer-events: all; }
+  .disc-modal-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 28px 24px; text-align: center; width: 300px; }
+  .disc-modal-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .disc-modal-sub { font-size: 12px; color: var(--text3); margin-bottom: 20px; }
+
+  /* ── NOTES MODAL ── */
+  .notes-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    z-index: 600; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .notes-modal.open { opacity: 1; pointer-events: all; }
+  .notes-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 24px; width: 340px; max-width: 95vw; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 10px 18px; font-size: 13px;
+    opacity: 0; transition: all 0.25s; z-index: 9999; white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  .toast.warn { border-left: 3px solid var(--orange); }
+
+  /* ── BTN ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: var(--font); transition: all 0.15s; }
+  .btn-gold { background: var(--gold); color: #000; }
+  .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
+  .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* ── RESERVATION MODAL ── */
+  .res-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    z-index: 700; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; backdrop-filter: blur(4px);
+  }
+  .res-modal.open { opacity: 1; pointer-events: all; }
+  .res-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 24px; width: 360px; max-width: 95vw; }
+  .res-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .res-form { display: flex; flex-direction: column; gap: 10px; }
+  .res-label { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+  .res-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--text); font-size: 13px; width: 100%; font-family: var(--font); }
+  .res-input:focus { outline: none; border-color: var(--gold); }
+  .res-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* Search */
+  .search-wrap { padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .search-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px 8px 30px; color: var(--text); font-size: 13px; font-family: var(--font); }
+  .search-input:focus { outline: none; border-color: var(--gold); }
+  .search-wrap { position: relative; }
+  .search-icon { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; font-size: 14px; }
+
+  .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 700px) {
+    .pos-right { position: fixed; bottom: 0; right: 0; left: 0; width: 100%; height: 55vh; border-top: 1px solid var(--border); border-right: none; z-index: 100; transform: translateY(calc(100% - 56px)); transition: transform 0.3s; }
+    .pos-right.open { transform: translateY(0); }
+    .pos-left { height: 100vh; }
+    .cart-header { cursor: pointer; }
+    .product-grid { padding-bottom: 70px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ════════════════════════════════════════════ -->
+<div class="setup-screen" id="setupScreen" style="display:none">
+  <div class="setup-box">
+    <div class="setup-header">
+      <h2>Gristo POS</h2>
+      <p>Enter your restaurant's Firebase config to connect</p>
+    </div>
+    <div class="setup-body">
+      <div>
+        <div class="setup-label">Firebase Config (JSON)</div>
+        <textarea class="setup-input" id="posConfigInput" rows="6" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+      </div>
+      <button class="setup-btn" onclick="applyPosConfig()">Connect & Start</button>
+      <div class="setup-msg" id="posConfigMsg"></div>
+      <p style="font-size:11px;color:var(--text3);text-align:center">Get this from your admin panel → Settings → Firebase Config</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PIN SCREEN ═══════════════════════════════════════════════ -->
+<div class="pin-screen" id="pinScreen" style="display:none">
+  <div class="pin-logo" id="pinLogo">Gristo</div>
+  <div class="pin-rest-name" id="pinRestName"></div>
+  <div class="pin-title en-only">Enter your PIN to continue</div>
+  <div class="pin-title ur-only">جاری رکھنے کے لیے پن درج کریں</div>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pin-keypad" id="pinKeypad">
+    <div class="pin-key" onclick="pinPress('1')">1</div>
+    <div class="pin-key" onclick="pinPress('2')">2</div>
+    <div class="pin-key" onclick="pinPress('3')">3</div>
+    <div class="pin-key" onclick="pinPress('4')">4</div>
+    <div class="pin-key" onclick="pinPress('5')">5</div>
+    <div class="pin-key" onclick="pinPress('6')">6</div>
+    <div class="pin-key" onclick="pinPress('7')">7</div>
+    <div class="pin-key" onclick="pinPress('8')">8</div>
+    <div class="pin-key" onclick="pinPress('9')">9</div>
+    <div class="pin-key" style="visibility:hidden"></div>
+    <div class="pin-key" onclick="pinPress('0')">0</div>
+    <div class="pin-key del" onclick="pinDel()">⌫</div>
+  </div>
+  <div class="pin-error" id="pinError"></div>
+  <div style="margin-top:20px;font-size:11px;color:var(--text3)">
+    <span id="langTogglePIN" onclick="toggleLangPIN()" style="cursor:pointer;border:1px solid var(--border);padding:4px 10px;border-radius:20px">EN | اردو</span>
+  </div>
+</div>
+
+<!-- ══ POS APP ═══════════════════════════════════════════════════ -->
+<div class="pos-root" id="posRoot" style="display:none">
+
+  <!-- LEFT: MENU -->
+  <div class="pos-left">
+    <div class="pos-header">
+      <div>
+        <div class="pos-logo" id="posLogo">Gristo</div>
+        <div class="pos-cashier" id="posCashierName"></div>
+      </div>
+      <div class="pos-header-right">
+        <div class="pos-offline-badge" id="offlineBadge">📡 OFFLINE</div>
+        <button class="icon-btn" onclick="openReservation()" id="resBtn" title="Reservation" style="display:none">📅</button>
+        <button class="icon-btn" onclick="doLogout()" title="Logout">🔒</button>
+      </div>
+    </div>
+
+    <div class="order-type-bar" id="orderTypeBar">
+      <div class="ot-btn active" data-type="dine_in" onclick="setOrderType('dine_in',this)">
+        🍽️ <span class="en-only">Dine-in</span><span class="ur-only">ڈائن ان</span>
+      </div>
+      <div class="ot-btn" data-type="takeaway" onclick="setOrderType('takeaway',this)">
+        🥡 <span class="en-only">Takeaway</span><span class="ur-only">ٹیک اوے</span>
+      </div>
+      <div class="ot-btn delivery-btn" data-type="delivery" onclick="setOrderType('delivery',this)" style="display:none">
+        🛵 <span class="en-only">Delivery</span><span class="ur-only">ڈیلیوری</span>
+      </div>
+    </div>
+
+    <div class="cat-bar" id="catBar">
+      <div class="cat-chip active" data-cat="" onclick="setCat('',this)">
+        <span class="en-only">All</span><span class="ur-only">سب</span>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="menuSearch" placeholder="Search menu..." oninput="renderMenu()">
+    </div>
+
+    <div class="product-grid" id="productGrid"></div>
+  </div>
+
+  <!-- RIGHT: CART -->
+  <div class="pos-right" id="cartPanel">
+    <div class="cart-header" onclick="toggleCart()">
+      <div class="cart-title en-only">Cart</div>
+      <div class="cart-title ur-only">کارٹ</div>
+      <span class="cart-count" id="cartCount">0</span>
+      <button class="icon-btn" onclick="event.stopPropagation();addNote()" title="Add note" style="margin-left:auto">📝</button>
+      <button class="icon-btn" onclick="event.stopPropagation();clearCart()" title="Clear">🗑️</button>
+    </div>
+
+    <div class="customer-info">
+      <input class="cust-input" id="custName" placeholder="Customer name" style="flex:1.2">
+      <input class="cust-input" id="custPhone" placeholder="Phone (optional)" style="flex:1">
+    </div>
+
+    <div class="cart-items" id="cartItems">
+      <div class="cart-empty">
+        <div class="cart-empty-icon">🛒</div>
+        <div class="cart-empty-text en-only">Cart is empty</div>
+        <div class="cart-empty-text ur-only">کارٹ خالی ہے</div>
+      </div>
+    </div>
+
+    <div class="cart-footer">
+      <div class="cart-row">
+        <span class="en-only" style="color:var(--text2)">Subtotal</span>
+        <span class="ur-only" style="color:var(--text2)">سب ٹوٹل</span>
+        <span id="subtotalVal">Rs 0</span>
+      </div>
+      <div class="cart-row discount" id="discountRow" style="display:none">
+        <span>Discount</span>
+        <span id="discountVal">- Rs 0</span>
+      </div>
+      <div class="cart-row total">
+        <span>Total</span>
+        <span id="totalVal">Rs 0</span>
+      </div>
+      <div class="discount-row">
+        <input class="disc-input" id="discPct" type="number" placeholder="% Discount" min="0" max="100">
+        <button class="disc-btn" onclick="applyDiscount()">Apply</button>
+        <button class="disc-btn" onclick="removeDiscount()" style="color:var(--red)">✕</button>
+      </div>
+      <div class="payment-row">
+        <button class="pay-btn pay-cash" onclick="checkout('cash')" id="payCashBtn">
+          💵 Cash<span class="en-only">Payment</span>
+        </button>
+        <button class="pay-btn pay-card" onclick="checkout('card')" id="payCardBtn" style="display:none">
+          💳 Card<span class="en-only">Payment</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SUCCESS SCREEN ════════════════════════════════════════════ -->
+<div class="success-screen" id="successScreen">
+  <div class="success-box">
+    <div class="success-icon">✅</div>
+    <div class="success-title en-only">Order Placed!</div>
+    <div class="success-title ur-only">آرڈر مکمل!</div>
+    <div class="success-meta" id="successMeta"></div>
+    <div class="success-actions">
+      <button class="btn btn-outline" onclick="closeSuccess()">
+        <span class="en-only">New Order</span><span class="ur-only">نیا آرڈر</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DISCOUNT PIN MODAL ═════════════════════════════════════════ -->
+<div class="disc-modal" id="discModal">
+  <div class="disc-modal-box">
+    <div class="disc-modal-title en-only">Manager Discount PIN</div>
+    <div class="disc-modal-title ur-only">مینیجر ڈسکاؤنٹ پن</div>
+    <div class="disc-modal-sub en-only">Enter manager PIN to apply discount</div>
+    <div class="disc-modal-sub ur-only">ڈسکاؤنٹ لگانے کے لیے مینیجر پن درج کریں</div>
+    <div class="pin-keypad" id="discKeypad" style="margin:0 auto">
+      <div class="pin-key" onclick="discPinPress('1')">1</div>
+      <div class="pin-key" onclick="discPinPress('2')">2</div>
+      <div class="pin-key" onclick="discPinPress('3')">3</div>
+      <div class="pin-key" onclick="discPinPress('4')">4</div>
+      <div class="pin-key" onclick="discPinPress('5')">5</div>
+      <div class="pin-key" onclick="discPinPress('6')">6</div>
+      <div class="pin-key" onclick="discPinPress('7')">7</div>
+      <div class="pin-key" onclick="discPinPress('8')">8</div>
+      <div class="pin-key" onclick="discPinPress('9')">9</div>
+      <div class="pin-key" style="visibility:hidden"></div>
+      <div class="pin-key" onclick="discPinPress('0')">0</div>
+      <div class="pin-key del" onclick="discPinDel()">⌫</div>
+    </div>
+    <div id="discPinDots" style="display:flex;gap:8px;justify-content:center;margin:14px 0 10px"></div>
+    <div class="pin-error" id="discPinError"></div>
+    <button class="btn btn-outline btn-sm" onclick="closeDiscModal()" style="margin-top:8px">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ NOTES MODAL ════════════════════════════════════════════════ -->
+<div class="notes-modal" id="notesModal">
+  <div class="notes-box">
+    <div style="font-size:14px;font-weight:600;margin-bottom:12px">📝 <span class="en-only">Order Note</span><span class="ur-only">آرڈر نوٹ</span></div>
+    <textarea class="res-input" id="orderNoteInput" rows="4" placeholder="Special instructions, allergies, etc..." style="resize:none;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:var(--font);font-size:13px"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-outline btn-sm" onclick="closeNotes()">Cancel</button>
+      <button class="btn btn-gold btn-sm" onclick="saveNote()">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RESERVATION MODAL ══════════════════════════════════════════ -->
+<div class="res-modal" id="resModal">
+  <div class="res-box">
+    <div class="res-title">📅 <span class="en-only">New Reservation</span><span class="ur-only">نئی ریزرویشن</span></div>
+    <div class="res-form">
+      <div>
+        <div class="res-label en-only">Customer Name</div>
+        <div class="res-label ur-only">گاہک کا نام</div>
+        <input class="res-input" id="resName" placeholder="Muhammad Ali">
+      </div>
+      <div>
+        <div class="res-label en-only">Phone</div>
+        <div class="res-label ur-only">فون</div>
+        <input class="res-input" id="resPhone" placeholder="03001234567">
+      </div>
+      <div>
+        <div class="res-label en-only">Date & Time</div>
+        <div class="res-label ur-only">تاریخ اور وقت</div>
+        <input class="res-input" type="datetime-local" id="resDateTime">
+      </div>
+      <div>
+        <div class="res-label en-only">Guests</div>
+        <div class="res-label ur-only">مہمانوں کی تعداد</div>
+        <input class="res-input" type="number" id="resGuests" placeholder="2" min="1" max="50">
+      </div>
+      <div>
+        <div class="res-label en-only">Note</div>
+        <div class="res-label ur-only">نوٹ</div>
+        <input class="res-input" id="resNote" placeholder="Special requests...">
+      </div>
+    </div>
+    <div class="res-footer">
+      <button class="btn btn-outline btn-sm" onclick="closeReservation()">Cancel</button>
+      <button class="btn btn-gold btn-sm" onclick="saveReservation()">Save Reservation</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+let db, firebaseApp;
+let pos = {
+  settings: {},
+  categories: [],
+  products: [],
+  cashiers: [],
+  currentCashier: null,
+  cart: [],
+  orderType: 'dine_in',
+  activeCat: '',
+  discount: 0,
+  discountApproved: false,
+  orderNote: '',
+  pinBuffer: '',
+  pinAttempts: 0,
+  pinLockUntil: 0,
+  discPinBuffer: '',
+  pendingCheckout: null,
+  orderCounter: 0,
+  offlineQueue: [],
+  isOnline: navigator.onLine,
+  lang: localStorage.getItem('gristo_pos_lang') || 'en',
+};
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  setLang(pos.lang, false);
+  const cfg = getStoredConfig();
+  if (!cfg) { document.getElementById('setupScreen').style.display = 'flex'; return; }
+  initFirebase(cfg);
+});
+
+function getStoredConfig() {
+  try { return JSON.parse(localStorage.getItem('gristo_fb_config') || 'null'); } catch { return null; }
+}
+
+function initFirebase(cfg) {
+  try {
+    if (!firebaseApp) {
+      firebaseApp = firebase.initializeApp(cfg);
+      db = firebase.firestore();
+      db.enablePersistence({synchronizeTabs: true}).catch(()=>{});
+    }
+    loadInitialData();
+    setupOnlineListener();
+  } catch(e) {
+    document.getElementById('setupScreen').style.display = 'flex';
+    document.getElementById('posConfigMsg').textContent = 'Firebase error: ' + e.message;
+  }
+}
+
+function applyPosConfig() {
+  try {
+    const raw = document.getElementById('posConfigInput').value.trim();
+    const cfg = JSON.parse(raw);
+    localStorage.setItem('gristo_fb_config', JSON.stringify(cfg));
+    document.getElementById('setupScreen').style.display = 'none';
+    initFirebase(cfg);
+  } catch(e) {
+    document.getElementById('posConfigMsg').textContent = 'Invalid JSON. Check your config.';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ONLINE/OFFLINE
+// ══════════════════════════════════════════════════════════════════
+function setupOnlineListener() {
+  const update = () => {
+    pos.isOnline = navigator.onLine;
+    const badge = document.getElementById('offlineBadge');
+    if (badge) badge.classList.toggle('show', !pos.isOnline);
+    if (pos.isOnline) syncOfflineQueue();
+  };
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
+}
+
+async function syncOfflineQueue() {
+  const queue = JSON.parse(localStorage.getItem('gristo_pos_queue') || '[]');
+  if (!queue.length) return;
+  const synced = [];
+  for (const order of queue) {
+    try {
+      order.source = 'pos_offline';
+      order.syncedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('orders').add(order);
+      synced.push(order);
+      showToast(`Synced offline order #${order.orderNumber}`, 'success');
+    } catch(e) { console.error('sync error', e); }
+  }
+  const remaining = queue.filter(o => !synced.find(s => s.orderNumber === o.orderNumber));
+  localStorage.setItem('gristo_pos_queue', JSON.stringify(remaining));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOAD DATA
+// ══════════════════════════════════════════════════════════════════
+async function loadInitialData() {
+  try {
+    // Settings
+    const settingsDoc = await db.collection('settings').doc('global').get();
+    if (settingsDoc.exists) {
+      pos.settings = settingsDoc.data();
+      updateBranding();
+    }
+    // Categories
+    const catSnap = await db.collection('categories').orderBy('order').get();
+    pos.categories = catSnap.docs.map(d => ({id:d.id,...d.data()}));
+    // Products
+    const prodSnap = await db.collection('products').get();
+    pos.products = prodSnap.docs.map(d => ({id:d.id,...d.data()}));
+    // Cashiers
+    const cashSnap = await db.collection('cashiers').where('active','==',true).get();
+    pos.cashiers = cashSnap.docs.map(d => ({id:d.id,...d.data()}));
+    // Cache for offline
+    localStorage.setItem('gristo_pos_cache', JSON.stringify({
+      settings: pos.settings, categories: pos.categories,
+      products: pos.products, cashiers: pos.cashiers,
+    }));
+    // Order counter
+    const lastOrder = await db.collection('orders').orderBy('orderNumber','desc').limit(1).get();
+    pos.orderCounter = lastOrder.empty ? 1000 : (lastOrder.docs[0].data().orderNumber||1000);
+  } catch(e) {
+    // Load from cache if offline
+    const cache = JSON.parse(localStorage.getItem('gristo_pos_cache') || 'null');
+    if (cache) {
+      pos.settings = cache.settings || {};
+      pos.categories = cache.categories || [];
+      pos.products = cache.products || [];
+      pos.cashiers = cache.cashiers || [];
+      updateBranding();
+      showToast('Offline mode — using cached data', 'warn');
+    }
+  }
+  showPinScreen();
+}
+
+function updateBranding() {
+  const name = pos.settings.restaurantName || 'Gristo';
+  const el = id => document.getElementById(id);
+  if (el('pinLogo')) el('pinLogo').textContent = name;
+  if (el('pinRestName')) el('pinRestName').textContent = pos.settings.tagline || 'POS Terminal';
+  if (el('posLogo')) el('posLogo').textContent = name;
+  // Delivery toggle
+  const delivBtns = document.querySelectorAll('.delivery-btn');
+  delivBtns.forEach(b => b.style.display = pos.settings.enableDelivery ? '' : 'none');
+  // Card payment
+  const cardBtn = document.getElementById('payCardBtn');
+  if (cardBtn) cardBtn.style.display = pos.settings.enableCard ? '' : 'none';
+  // Reservation button
+  const resBtn = document.getElementById('resBtn');
+  if (resBtn) resBtn.style.display = pos.settings.enableReservations ? '' : 'none';
+  // PIN dots
+  const pinLen = parseInt(pos.settings.pinLength) || 4;
+  const dotsEl = document.getElementById('pinDots');
+  if (dotsEl) dotsEl.innerHTML = Array(pinLen).fill('<div class="pin-dot"></div>').join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PIN LOGIN
+// ══════════════════════════════════════════════════════════════════
+function showPinScreen() {
+  document.getElementById('pinScreen').style.display = 'flex';
+  document.getElementById('posRoot').style.display = 'none';
+  pos.pinBuffer = '';
+  updatePinDots();
+}
+
+function pinPress(digit) {
+  const pinLen = parseInt(pos.settings.pinLength) || 4;
+  // Check lockout
+  if (Date.now() < pos.pinLockUntil) {
+    const secs = Math.ceil((pos.pinLockUntil - Date.now())/1000);
+    document.getElementById('pinError').textContent = `Too many attempts. Wait ${secs}s`;
+    return;
+  }
+  if (pos.pinBuffer.length >= pinLen) return;
+  pos.pinBuffer += digit;
+  updatePinDots();
+  if (pos.pinBuffer.length === pinLen) {
+    setTimeout(() => checkPin(), 100);
+  }
+}
+
+function pinDel() {
+  pos.pinBuffer = pos.pinBuffer.slice(0,-1);
+  updatePinDots();
+  document.getElementById('pinError').textContent = '';
+}
+
+function updatePinDots() {
+  const pinLen = parseInt(pos.settings.pinLength) || 4;
+  const dots = document.querySelectorAll('#pinDots .pin-dot');
+  dots.forEach((d,i) => d.classList.toggle('filled', i < pos.pinBuffer.length));
+}
+
+async function checkPin() {
+  const entered = pos.pinBuffer;
+  const cashier = pos.cashiers.find(c => c.pin === entered);
+  if (!cashier) {
+    pos.pinAttempts++;
+    pos.pinBuffer = '';
+    updatePinDots();
+    // Lockout after 5 fails
+    if (pos.pinAttempts >= 5) {
+      pos.pinLockUntil = Date.now() + 5*60*1000;
+      pos.pinAttempts = 0;
+      document.getElementById('pinError').textContent = 'Too many failed attempts. Locked for 5 minutes.';
+      // Log attempt
+      if (pos.isOnline) {
+        try { await db.collection('pin_attempts').add({attempted: entered, at: firebase.firestore.FieldValue.serverTimestamp(), locked: true}); } catch {}
+      }
+    } else {
+      document.getElementById('pinError').textContent = `Incorrect PIN. ${5-pos.pinAttempts} attempts left.`;
+    }
+    // Shake animation
+    document.getElementById('pinDots').style.animation = 'none';
+    document.getElementById('pinDots').offsetHeight;
+    document.getElementById('pinDots').style.animation = 'shake 0.3s';
+    return;
+  }
+
+  // Check session — single session enforcement
+  if (pos.isOnline) {
+    try {
+      const sessionDoc = await db.collection('pos_sessions').doc(entered).get();
+      const deviceId = localStorage.getItem('gristo_device_id') || generateDeviceId();
+      if (sessionDoc.exists && sessionDoc.data().deviceId !== deviceId) {
+        pos.pinBuffer = '';
+        updatePinDots();
+        document.getElementById('pinError').textContent = `This PIN is already logged in on another device.`;
+        return;
+      }
+      // Create/update session
+      await db.collection('pos_sessions').doc(entered).set({
+        cashierName: cashier.name,
+        deviceId, loggedInAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      // Update last login
+      await db.collection('cashiers').doc(cashier.id).update({lastLogin: firebase.firestore.FieldValue.serverTimestamp()});
+    } catch(e) { /* offline — allow login */ }
+  }
+
+  pos.currentCashier = cashier;
+  pos.pinAttempts = 0;
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('posCashierName').textContent = cashier.name;
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('posRoot').style.display = 'flex';
+  renderCatBar();
+  renderMenu();
+}
+
+function generateDeviceId() {
+  const id = 'device_' + Math.random().toString(36).substr(2,9) + Date.now();
+  localStorage.setItem('gristo_device_id', id);
+  return id;
+}
+
+async function doLogout() {
+  if (!confirm('Log out?')) return;
+  // Clear session
+  if (pos.currentCashier && pos.isOnline) {
+    try { await db.collection('pos_sessions').doc(pos.currentCashier.pin).delete(); } catch {}
+  }
+  pos.currentCashier = null;
+  pos.cart = [];
+  pos.discount = 0;
+  pos.orderNote = '';
+  pos.pinBuffer = '';
+  showPinScreen();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MENU
+// ══════════════════════════════════════════════════════════════════
+function renderCatBar() {
+  const bar = document.getElementById('catBar');
+  bar.innerHTML = `<div class="cat-chip ${!pos.activeCat?'active':''}" data-cat="" onclick="setCat('',this)"><span class="en-only">All</span><span class="ur-only">سب</span></div>` +
+    pos.categories.map(c => `<div class="cat-chip ${pos.activeCat===c.id?'active':''}" data-cat="${c.id}" onclick="setCat('${c.id}',this)">${c.icon||''} ${pos.lang==='ur'&&c.nameUr ? c.nameUr : c.name}</div>`).join('');
+}
+
+function setCat(id, el) {
+  pos.activeCat = id;
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === id));
+  renderMenu();
+}
+
+function renderMenu() {
+  const search = (document.getElementById('menuSearch')?.value||'').toLowerCase();
+  let filtered = pos.products.filter(p => {
+    if (p.available === false) return false;
+    if (pos.activeCat && p.categoryId !== pos.activeCat) return false;
+    if (search && !p.name.toLowerCase().includes(search) && !(p.nameUr||'').includes(search)) return false;
+    return true;
+  });
+  const grid = document.getElementById('productGrid');
+  if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">No items found</div>'; return; }
+  grid.innerHTML = filtered.map(p => {
+    const qty = (pos.cart.find(c=>c.productId===p.id)||{}).qty||0;
+    const outOfStock = p.stock !== undefined && p.stock <= 0;
+    const discPrice = p.discount ? Math.round(p.price*(1-p.discount/100)) : null;
+    const displayName = pos.lang==='ur'&&p.nameUr ? p.nameUr : p.name;
+    return `<div class="product-tile ${qty>0?'in-cart':''} ${outOfStock?'unavail':''}" onclick="addToCart('${p.id}')">
+      ${outOfStock ? '<div class="out-badge">OUT OF STOCK</div>' : ''}
+      <div class="product-tile-badge">${qty||''}</div>
+      ${p.imageBase64 ? `<img src="${p.imageBase64}" alt="${p.name}" loading="lazy">` :
+        `<div style="height:80px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px">${(pos.categories.find(c=>c.id===p.categoryId)||{}).icon||'🍽️'}</div>`}
+      <div class="product-tile-body">
+        <div class="product-tile-name">${displayName}</div>
+        <div class="product-tile-price">Rs ${(discPrice||p.price||0).toLocaleString()}</div>
+        ${discPrice ? `<div class="product-tile-disc">Rs ${p.price.toLocaleString()}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CART
+// ══════════════════════════════════════════════════════════════════
+function addToCart(productId) {
+  const p = pos.products.find(x=>x.id===productId); if(!p) return;
+  if (p.stock !== undefined && p.stock <= 0) { showToast('Out of stock','error'); return; }
+  const existing = pos.cart.find(c=>c.productId===productId);
+  const discPrice = p.discount ? Math.round(p.price*(1-p.discount/100)) : p.price;
+  if (existing) {
+    if (p.stock !== undefined && existing.qty >= p.stock) { showToast('Not enough stock','error'); return; }
+    existing.qty++;
+  } else {
+    pos.cart.push({productId, name:p.name, nameUr:p.nameUr||'', price:discPrice, originalPrice:p.price, qty:1});
+  }
+  pos.discount = 0;
+  pos.discountApproved = false;
+  updateCart();
+  renderMenu();
+  // Mobile: open cart
+  document.getElementById('cartPanel').classList.add('open');
+}
+
+function changeQty(productId, delta) {
+  const idx = pos.cart.findIndex(c=>c.productId===productId);
+  if (idx<0) return;
+  pos.cart[idx].qty += delta;
+  if (pos.cart[idx].qty <= 0) pos.cart.splice(idx,1);
+  pos.discount = 0;
+  pos.discountApproved = false;
+  updateCart();
+  renderMenu();
+}
+
+function clearCart() {
+  if (!pos.cart.length) return;
+  if (!confirm('Clear cart?')) return;
+  pos.cart = [];
+  pos.discount = 0;
+  pos.discountApproved = false;
+  pos.orderNote = '';
+  updateCart();
+  renderMenu();
+}
+
+function toggleCart() {
+  document.getElementById('cartPanel').classList.toggle('open');
+}
+
+function updateCart() {
+  const subtotal = pos.cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const discAmt = Math.round(subtotal * pos.discount / 100);
+  const total = subtotal - discAmt;
+
+  document.getElementById('subtotalVal').textContent = `Rs ${subtotal.toLocaleString()}`;
+  document.getElementById('discountRow').style.display = discAmt > 0 ? 'flex' : 'none';
+  document.getElementById('discountVal').textContent = `- Rs ${discAmt.toLocaleString()}`;
+  document.getElementById('totalVal').textContent = `Rs ${total.toLocaleString()}`;
+  document.getElementById('cartCount').textContent = pos.cart.reduce((s,c)=>s+c.qty,0);
+
+  const itemsEl = document.getElementById('cartItems');
+  if (!pos.cart.length) {
+    itemsEl.innerHTML = `<div class="cart-empty"><div class="cart-empty-icon">🛒</div><div class="cart-empty-text">Cart is empty</div></div>`;
+    return;
+  }
+  itemsEl.innerHTML = pos.cart.map(c => `
+    <div class="cart-item">
+      <div class="cart-item-name">${pos.lang==='ur'&&c.nameUr?c.nameUr:c.name}</div>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeQty('${c.productId}',-1)">−</button>
+        <span class="qty-num">${c.qty}</span>
+        <button class="qty-btn" onclick="changeQty('${c.productId}',1)">+</button>
+      </div>
+      <div class="cart-item-price">Rs ${(c.price*c.qty).toLocaleString()}</div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DISCOUNT
+// ══════════════════════════════════════════════════════════════════
+function applyDiscount() {
+  const pct = parseFloat(document.getElementById('discPct').value);
+  if (isNaN(pct) || pct <= 0 || pct > 100) { showToast('Enter valid discount %','error'); return; }
+  // If manager PIN is set, require it
+  if (pos.settings.mgrPin) {
+    pos.pendingCheckout = null; // not checkout, just discount
+    openDiscModal(pct);
+  } else {
+    pos.discount = pct;
+    updateCart();
+  }
+}
+
+function removeDiscount() {
+  pos.discount = 0;
+  pos.discountApproved = false;
+  document.getElementById('discPct').value = '';
+  updateCart();
+}
+
+let pendingDiscPct = 0;
+function openDiscModal(pct) {
+  pendingDiscPct = pct;
+  pos.discPinBuffer = '';
+  updateDiscDots();
+  document.getElementById('discPinError').textContent = '';
+  document.getElementById('discModal').classList.add('open');
+}
+function closeDiscModal() { document.getElementById('discModal').classList.remove('open'); pos.discPinBuffer = ''; }
+function discPinPress(d) { if(pos.discPinBuffer.length>=8)return; pos.discPinBuffer+=d; updateDiscDots(); if(pos.discPinBuffer.length>=4)checkDiscPin(); }
+function discPinDel() { pos.discPinBuffer=pos.discPinBuffer.slice(0,-1); updateDiscDots(); }
+function updateDiscDots() {
+  const len = pos.discPinBuffer.length;
+  document.getElementById('discPinDots').innerHTML = Array(Math.max(len,4)).fill(0).map((_,i)=>`<div style="width:12px;height:12px;border-radius:50%;background:${i<len?'var(--gold)':'var(--surface3)'};border:1px solid var(--border2)"></div>`).join('');
+}
+function checkDiscPin() {
+  if (pos.discPinBuffer === pos.settings.mgrPin) {
+    closeDiscModal();
+    pos.discount = pendingDiscPct;
+    updateCart();
+    showToast('Discount applied ✓','success');
+  } else if (pos.discPinBuffer.length >= (pos.settings.mgrPin||'').length) {
+    document.getElementById('discPinError').textContent = 'Incorrect PIN';
+    pos.discPinBuffer = '';
+    updateDiscDots();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ORDER TYPE
+// ══════════════════════════════════════════════════════════════════
+function setOrderType(type, el) {
+  pos.orderType = type;
+  document.querySelectorAll('.ot-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHECKOUT
+// ══════════════════════════════════════════════════════════════════
+async function checkout(payment) {
+  if (!pos.cart.length) { showToast('Cart is empty','error'); return; }
+
+  const custName = document.getElementById('custName').value.trim() || 'Customer';
+  const custPhone = document.getElementById('custPhone').value.trim();
+  const subtotal = pos.cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const discAmt = Math.round(subtotal * pos.discount / 100);
+  const total = subtotal - discAmt;
+  pos.orderCounter++;
+
+  const order = {
+    orderNumber: pos.orderCounter,
+    customerName: custName,
+    customerPhone: custPhone,
+    items: pos.cart.map(c => ({name:c.name, nameUr:c.nameUr, price:c.price, qty:c.qty})),
+    orderType: pos.orderType,
+    payment,
+    subtotal,
+    discount: discAmt,
+    total,
+    notes: pos.orderNote,
+    cashierName: pos.currentCashier?.name || '',
+    cashierId: pos.currentCashier?.id || '',
+    source: 'pos',
+    status: 'pending',
+  };
+
+  const btn = payment === 'cash' ? document.getElementById('payCashBtn') : document.getElementById('payCardBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  if (pos.isOnline) {
+    try {
+      order.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('orders').add(order);
+      // Deduct stock
+      for (const cartItem of pos.cart) {
+        const p = pos.products.find(x=>x.id===cartItem.productId);
+        if (p && p.autoDeduct !== false && p.stock !== undefined) {
+          const newStock = Math.max(0, p.stock - cartItem.qty);
+          await db.collection('products').doc(cartItem.productId).update({stock: newStock});
+          p.stock = newStock;
+        }
+      }
+      // Save customer
+      if (custPhone) saveCustomer(custName, custPhone, total);
+    } catch(e) {
+      // Queue offline
+      order.createdAt = new Date().toISOString();
+      queueOffline(order);
+      showToast('Saved offline — will sync when connected','warn');
+    }
+  } else {
+    order.createdAt = new Date().toISOString();
+    queueOffline(order);
+  }
+
+  // Success
+  document.getElementById('successMeta').innerHTML = `
+    <b>Order #${pos.orderCounter}</b><br>
+    ${custName}${custPhone?` • ${custPhone}`:''}<br>
+    ${pos.cart.length} items • ${payment==='card'?'Card':'Cash'}<br>
+    <span style="color:var(--gold);font-size:18px;font-weight:700">Rs ${total.toLocaleString()}</span>
+    ${discAmt?`<br><span style="color:var(--red);font-size:12px">Discount: -Rs ${discAmt.toLocaleString()}</span>`:''}
+  `;
+
+  pos.cart = [];
+  pos.discount = 0;
+  pos.discountApproved = false;
+  pos.orderNote = '';
+  document.getElementById('custName').value = '';
+  document.getElementById('custPhone').value = '';
+  document.getElementById('discPct').value = '';
+  updateCart();
+  renderMenu();
+
+  document.getElementById('successScreen').classList.add('show');
+  btn.disabled = false;
+  btn.innerHTML = payment==='cash' ? '💵 Cash' : '💳 Card';
+}
+
+function queueOffline(order) {
+  const q = JSON.parse(localStorage.getItem('gristo_pos_queue')||'[]');
+  q.push(order);
+  localStorage.setItem('gristo_pos_queue', JSON.stringify(q));
+}
+
+async function saveCustomer(name, phone, spent) {
+  if (!phone) return;
+  try {
+    const ref = db.collection('customers').doc(phone.replace(/\D/g,''));
+    const doc = await ref.get();
+    if (doc.exists) {
+      await ref.update({
+        visits: firebase.firestore.FieldValue.increment(1),
+        totalSpent: firebase.firestore.FieldValue.increment(spent),
+        lastVisit: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await ref.set({name, phone, visits:1, totalSpent:spent, lastVisit:firebase.firestore.FieldValue.serverTimestamp(), createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    }
+  } catch {}
+}
+
+function closeSuccess() {
+  document.getElementById('successScreen').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NOTES
+// ══════════════════════════════════════════════════════════════════
+function addNote() { document.getElementById('orderNoteInput').value = pos.orderNote; document.getElementById('notesModal').classList.add('open'); }
+function closeNotes() { document.getElementById('notesModal').classList.remove('open'); }
+function saveNote() { pos.orderNote = document.getElementById('orderNoteInput').value.trim(); closeNotes(); showToast('Note added','success'); }
+
+// ══════════════════════════════════════════════════════════════════
+// RESERVATION
+// ══════════════════════════════════════════════════════════════════
+function openReservation() {
+  const now = new Date(); now.setHours(now.getHours()+1,0,0,0);
+  document.getElementById('resDateTime').value = now.toISOString().slice(0,16);
+  document.getElementById('resModal').classList.add('open');
+}
+function closeReservation() { document.getElementById('resModal').classList.remove('open'); }
+
+async function saveReservation() {
+  const name = document.getElementById('resName').value.trim();
+  const phone = document.getElementById('resPhone').value.trim();
+  const dt = document.getElementById('resDateTime').value;
+  const guests = parseInt(document.getElementById('resGuests').value)||2;
+  const note = document.getElementById('resNote').value.trim();
+
+  if (!name || !phone || !dt) { showToast('Name, phone, and time required','error'); return; }
+
+  const data = {customerName:name, phone, reservationTs: new Date(dt).toISOString(), guestCount:guests, status:'pending', note, createdBy:pos.currentCashier?.name||'POS', createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+
+  if (pos.isOnline) {
+    try { await db.collection('reservations').add(data); showToast('Reservation saved ✓','success'); closeReservation(); ['resName','resPhone','resNote'].forEach(i=>document.getElementById(i).value=''); }
+    catch(e) { showToast('Error: '+e.message,'error'); }
+  } else {
+    const q = JSON.parse(localStorage.getItem('gristo_res_queue')||'[]');
+    q.push({...data, createdAt:new Date().toISOString()});
+    localStorage.setItem('gristo_res_queue', JSON.stringify(q));
+    showToast('Saved offline — will sync later','warn');
+    closeReservation();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LANGUAGE
+// ══════════════════════════════════════════════════════════════════
+function setLang(lang, save=true) {
+  pos.lang = lang;
+  if (save) localStorage.setItem('gristo_pos_lang', lang);
+  document.body.classList.toggle('urdu', lang==='ur');
+  renderCatBar();
+  renderMenu();
+}
+function toggleLangPIN() { setLang(pos.lang==='en'?'ur':'en'); }
+
+// ══════════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KEYBOARD SUPPORT
+// ══════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (document.getElementById('pinScreen').style.display !== 'none') {
+    if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+    if (e.key === 'Backspace') pinDel();
+  }
+});
+</script>
+
+<style>
+@keyframes shake {
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-8px)}
+  75%{transform:translateX(8px)}
+}
+</style>
+</body>
+</html>
